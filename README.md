@@ -1,0 +1,79 @@
+# kvgw — Kurage Vibe Groupware
+
+**メッセージ・施設予約・ToDo・共有スケジュール**が1つの画面に入った、社内グループウェアです。
+PHP が動くレンタルサーバーか社内のサーバーに置いて使います。人数が増えても月額の利用料はかかりません。
+
+土台は [Kurage Vibe Groupware Core（kvgwc）](https://github.com/katsushi2441/kvgwc) です。
+このリポジトリには Core を同梱してあるので、これだけで動きます。
+
+- **データベース不要**（JSON ファイルに `flock` で書きます）
+- **外部ライブラリ不要**（Composer も npm も使いません）
+- **FTP で上げるだけ**（常駐プロセスもポートも使いません）
+- **MIT License**
+
+デモ: <https://proto.exbridge.jp/kvgw/>
+
+## 入っているもの
+
+| 機能 | 中身 |
+|---|---|
+| **メッセージ** | 宛先に入れた人だけが読める連絡。コメントで返事・未読と既読・下書き・検索・添付・ごみ箱 |
+| **施設予約** | 会議室・社用車・備品。1日／1週間の空き表・重複は入らない・繰り返し・共有スケジュールへ転記 |
+| **ToDo** | 自分のやること・人に頼んだこと。期日・優先度・カテゴリ・完了 |
+| **共有スケジュール** | 全員に公開。スマートフォンの標準カレンダーに取り込める（Core） |
+| **社員マスタ・アカウント** | 社員番号＋パスワード／Google Workspace／Microsoft 365。担当・責任者・管理者（Core） |
+| **業務アプリの追加** | `apps/` に定義ファイルを1枚置くと、日報・点検記録などが増える（Core） |
+
+## ファイル
+
+| ファイル | 役割 |
+|---|---|
+| `public/kvgw.php` | 3つの機能の共通部品。メニュー・ホーム・画面の振り分け |
+| `public/kvgw_message.php` | メッセージ |
+| `public/kvgw_facility.php` | 施設予約 |
+| `public/kvgw_todo.php` | ToDo |
+| `public/kvgwc*.php` `public/apps/` | Core（同梱） |
+| `scripts/check_kvgw.php` | 3つの機能の検証（122件） |
+| `scripts/check_kvgwc.php` | Core の検証（214件） |
+
+`kvgw*.php` の4枚を消すと、Core 単体に戻ります。
+
+## 置き方
+
+1. `public/` の中身をサーバーに上げる
+2. `kvgwc_config.php.example` を `kvgwc_config.php` にコピーして、会社名・認証方式・部署を書く
+3. `kvgwc.php` を開いて、最初の管理者でログインする
+4. 社員マスタで社員とアカウントを作る。施設予約 →「施設の登録」で会議室などを足す
+
+すでに Core を使っている場合は、`kvgw*.php` の4枚を足し、`kvgwc.php` を差し替えるだけです。
+設定と台帳はそのまま使えます。
+
+## だれが何をできるか
+
+| | 見られる人 | 変えられる人 |
+|---|---|---|
+| メッセージ | 差出人と宛先だけ（管理者でも、宛先に入っていなければ読めない） | 差出人 |
+| 施設の予約 | 全員 | 予約した人・同じ部署の責任者・管理者 |
+| 施設の登録 | 全員 | 管理者 |
+| ToDo | 作った人と担当の人だけ | 中身は作った人。完了にするのは両方 |
+
+判定は機能ごとに1つの関数（`kvgw_msg_can` / `kvgw_fac_can` / `kvgw_todo_can`）にあり、
+保存の直前（台帳のロックの中）でもう一度確かめます。
+
+## 検証
+
+```
+php scripts/check_kvgw.php     # 成功 122 件 / 失敗 0 件
+php scripts/check_kvgwc.php    # 成功 214 件 / 失敗 0 件
+```
+
+## 動作環境
+
+PHP 7.0 以上（8.x 推奨）。拡張は `openssl` `curl` `mbstring` `json` `session`。
+
+## 導入・運用の手順書とサポート
+
+設置から運用までの手順書を同梱した版と、導入の相談は
+[kappstore の商品ページ](https://kappstore.exbridge.jp/app.php?id=fe433e5061769cba&ref=github-kvgw) から。
+
+株式会社エクスブリッジ

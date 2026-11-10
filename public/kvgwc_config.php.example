@@ -1,0 +1,87 @@
+<?php
+/**
+ * Kurage Vibe Groupware 設定 — このファイルをコピーして kvgwc_config.php にし、値を入れる。
+ * 設定変更でやることは、ほぼ全部このファイルの中で完結する。
+ */
+
+/* ---- 表示 ---- */
+define('KVGWC_SITE_NAME', '社内グループウェア');
+define('KVGWC_ACCENT', '#1F4E79');
+
+/* ---- 認証方式 ----
+ * 'password'  … 設定したパスワードで入る(小規模・お試し)
+ * 'google'    … Google Workspace のアカウントで入る(推奨)
+ * 'microsoft' … Microsoft 365 のアカウントで入る
+ */
+define('KVGWC_AUTH', 'password');
+
+/* ---- password の場合 ----
+ *
+ * 社員は「社員番号 + パスワード」で入る。**社員ごとのパスワードは、この
+ * ファイルではなく画面（社員マスタ → アカウント → パスワードを発行）で
+ * 管理する。** 管理者が発行し、本人が最初のログインで変更する。
+ *
+ * ここに書くのは「初期管理者」だけ。設置直後は誰もアカウントを持っていない
+ * ので、このIDとパスワードで最初の管理者として入る。
+ * ハッシュは scripts/make_password_hash.php で作る（生のパスワードは書かない）。
+ *
+ * 【設置が済んだら KVGWC_PASSWORD_HASH を空にしてよい】
+ * 空にしない場合、このパスワードを知っている人は必ず管理者として入れる。
+ * 締め出されたときの非常口として残すかどうかは、運用方針で決める。
+ */
+define('KVGWC_ADMIN_LOGIN', 'admin');
+define('KVGWC_PASSWORD_HASH', '');
+define('KVGWC_ADMIN_NAME', '初期管理者');
+define('KVGWC_ADMIN_EMAIL', '');
+
+/* ---- google / microsoft の場合 ----
+ *
+ * Google Cloud コンソール →「APIとサービス」→「認証情報」→
+ * 「OAuth クライアント ID」(種類: ウェブアプリケーション)を作り、
+ * 「承認済みのリダイレクト URI」に、この画面のURL + ?do=callback を登録する。
+ *   例) https://gw.example.co.jp/kvgwc.php?do=callback
+ *
+ * KVGWC_HD には自社の Workspace ドメインを必ず入れる。空にすると
+ * 世界中の Google アカウントでログインできてしまう。
+ */
+define('KVGWC_CLIENT_ID', '');
+define('KVGWC_CLIENT_SECRET', '');
+define('KVGWC_HD', '');                  // 例) example.co.jp
+// define('KVGWC_MS_TENANT', '');        // Microsoft 365 のテナントID
+
+/* ---- 設置URL ----
+ * 空ならリクエストから自動で組み立てる。リバースプロキシの内側など、
+ * 自動判定が効かない場所でだけ書く。
+ */
+define('KVGWC_BASE_URL', '');
+
+/* ---- 部署 ----
+ * キー(左)は運用開始後に変えないこと。過去の記録との対応が切れる。
+ * 表示名(右)はいつ変えてもよい。
+ */
+function kvgwc_depts() {
+    return array(
+        'sales'   => '営業部',
+        'seizou'  => '製造部',
+        'kanri'   => '管理部',
+    );
+}
+
+/* ---- メッセージ・施設予約・ToDo（書かなければ、かっこの中の値で動く） ----
+ * KVGW_UPLOAD        … メッセージにファイルを添付できるようにするか（true）
+ * KVGW_UPLOAD_MAX_MB … 添付1つの大きさの上限。MB（10）
+ *                      サーバーの upload_max_filesize より大きくはならない
+ * KVGW_RESERVE_DAYS  … 施設を何日先まで予約できるか（180）
+ * KVGW_DAY_START     … 施設予約の表を何時から出すか（8）
+ * KVGW_DAY_END       … 施設予約の表を何時まで出すか（20）
+ */
+// define('KVGW_UPLOAD', true);
+// define('KVGW_UPLOAD_MAX_MB', 10);
+// define('KVGW_RESERVE_DAYS', 180);
+// define('KVGW_DAY_START', 8);
+// define('KVGW_DAY_END', 20);
+
+/* ---- デモモード ----
+ * true にすると画面にデモ表示が出る。本番では false のまま。
+ */
+define('KVGWC_DEMO', false);

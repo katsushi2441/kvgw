@@ -1,0 +1,20 @@
+# 設置ごとの設定（クライアントシークレットが入る）
+public/kvgwc_config.php
+# 台帳（個人情報）と添付
+public/kvgwc_data/
+outputs/
+
+# 手順書（kappstore の配布物に入れる。GitHub にはコードだけを載せる）
+manual/
+AGENTS.md
+CLAUDE.md
+
+# 社内の道具（デモ・配置・パッケージ組み立て・商品画像）。製品の一部ではない。
+demo/
+scripts/build_manual.sh
+scripts/build_package.sh
+scripts/make_product_image.py
+scripts/deploy_demo.sh
+scripts/seed_demo.php
+scripts/run_local.sh
+scripts/e2e.py

@@ -2,25 +2,28 @@
 /**
  * Kurage Vibe Groupware (kvgw) — Core に足す「グループウェアの本機能」。
  *
- *   メッセージ(kvgw_message.php)・施設予約(kvgw_facility.php)・ToDo(kvgw_todo.php)
+ *   メッセージ(kvgw_message.php)・掲示板(kvgw_bulletin.php)・施設予約(kvgw_facility.php)・
+ *   ToDo(kvgw_todo.php)・ワークフロー(kvgw_workflow.php)
  *
  * Core(kvgwc.php)は、このファイルがあれば読み込み、7か所の拡張点から下の関数を呼ぶ。
  * このファイルを消せば Core 単体に戻る。台帳は Core と同じ kv_load / kv_update を通す。
  *
  * 決まり:
  *   - 誰が何をできるかは、機能ごとに1つの関数で決める
- *       kvgw_msg_can() / kvgw_fac_can() / kvgw_todo_can()
+ *       kvgw_msg_can() / kvgw_bbs_can() / kvgw_fac_can() / kvgw_todo_can() / kvgw_wf_can()
  *     画面でボタンを隠すだけにしない。保存の直前(kv_update のロックの中)でもう一度確かめる。
  *   - 画面の URL は kvgwc.php?m=<機能>&a=<操作>。Core の ?do= ?app= とぶつからない。
  *   - 入力の誤りは 400 で返す。画面の文字は必ず kv_h() で出す。
  */
 
 define('KVGWC_PRODUCT', 'Kurage Vibe Groupware');
-define('KVGWC_VERSION', 'v1.0');
+define('KVGWC_VERSION', 'v1.1');
 
 require_once __DIR__ . '/kvgw_message.php';
 require_once __DIR__ . '/kvgw_facility.php';
 require_once __DIR__ . '/kvgw_todo.php';
+require_once __DIR__ . '/kvgw_bulletin.php';
+require_once __DIR__ . '/kvgw_workflow.php';
 
 /* ============================================================
  * 共通の小さな部品
@@ -148,6 +151,8 @@ function kvgw_flash() {
         'trash' => 'ごみ箱に移しました', 'restore' => '受信箱に戻しました',
         'added' => '宛先を追加しました', 'reserved' => '予約しました', 'canceled' => '予約を取り消しました',
         'done' => '完了にしました', 'undone' => '未完了に戻しました',
+        'posted' => '掲示しました', 'applied' => '申請しました', 'approved' => '承認しました',
+        'returned' => '差し戻しました', 'rejected' => '却下しました', 'withdrawn' => '取り戻して、下書きに戻しました',
     );
     $k = (string)$_GET['msg'];
     if (isset($m[$k])) { echo '<div class="kv-msg"><span>✓</span>' . kv_h($m[$k]) . '</div>'; }
@@ -163,6 +168,8 @@ function kvgw_dispatch($user) {
     if ($m === 'message')       { kvgw_message_route($user); }
     else if ($m === 'facility') { kvgw_facility_route($user); }
     else if ($m === 'todo')     { kvgw_todo_route($user); }
+    else if ($m === 'bulletin') { kvgw_bulletin_route($user); }
+    else if ($m === 'workflow') { kvgw_workflow_route($user); }
     else { kv_fail(404, 'その画面はありません。'); }
     exit;
 }
@@ -174,10 +181,14 @@ function kvgw_dispatch($user) {
 function kvgw_nav($user, $current) {
     $unread = kvgw_msg_unread_count($user);
     $open = kvgw_todo_open_count($user);
+    $news = kvgw_bbs_unread_count($user);
+    $wait = kvgw_wf_wait_count($user);
     $tabs = array(
         array('message',  '✉️', 'メッセージ', $unread > 0 ? '未読 ' . $unread : ''),
+        array('bulletin', '📌', '掲示板', $news > 0 ? '未読 ' . $news : ''),
         array('facility', '🏢', '施設予約', ''),
         array('todo',     '✅', 'ToDo', $open > 0 ? (string)$open : ''),
+        array('workflow', '📝', 'ワークフロー', $wait > 0 ? (string)$wait : ''),
     );
     $h = '';
     foreach ($tabs as $t) {
@@ -255,6 +266,34 @@ function kvgw_home($user) {
     if ($todos === '') { $todos = '<p class="gw-none">未完了のToDoはありません</p>'; }
     else if ($n2 > 5) { $todos .= '<p class="gw-none">ほか ' . ($n2 - 5) . ' 件</p>'; }
 
+    /* 自分の承認を待っている申請と、自分に差し戻された申請 */
+    $wfs = '';
+    $n3 = 0;
+    foreach (kvgw_wf_all() as $r) {
+        $mine = kvgw_wf_can($user, 'act', $r);
+        $back = (!$mine && $r['from'] === $user['id'] && $r['status'] === 'returned');
+        if (!$mine && !$back) { continue; }
+        if (++$n3 > 5) { continue; }
+        $wfs .= '<a class="gw-line" href="' . kv_h(kvgw_url('workflow', array('a' => 'view', 'id' => $r['id']))) . '">'
+              . '<b>' . kv_h($r['title']) . '</b><small' . ($back ? ' class="gw-late"' : '') . '>'
+              . ($back ? '差し戻されています' : kv_h($r['form_name'] . '　' . $r['from_name'])) . '</small></a>';
+    }
+    if ($wfs === '') { $wfs = '<p class="gw-none">承認待ちの申請はありません</p>'; }
+    else if ($n3 > 5) { $wfs .= '<p class="gw-none">ほか ' . ($n3 - 5) . ' 件</p>'; }
+
+    /* まだ読んでいない掲示 */
+    $bbs = '';
+    $n4 = 0;
+    foreach (kvgw_bbs_list($user, 'now', '', '') as $b) {
+        if (!$b['_unread'] && $b['_newc'] === 0) { continue; }
+        if (++$n4 > 5) { continue; }
+        $bbs .= '<a class="gw-line" href="' . kv_h(kvgw_url('bulletin', array('a' => 'view', 'id' => $b['id']))) . '">'
+              . '<b>' . kv_h($b['title']) . '</b><small>' . kv_h($b['from_name'])
+              . ($b['_newc'] > 0 ? '　新しいコメント ' . (int)$b['_newc'] : '') . '</small></a>';
+    }
+    if ($bbs === '') { $bbs = '<p class="gw-none">未読の掲示はありません</p>'; }
+    else if ($n4 > 5) { $bbs .= '<p class="gw-none">ほか ' . ($n4 - 5) . ' 件</p>'; }
+
     echo '<div class="gw-portal">'
        . '<section class="kv-card"><h2><span class="kv-emoji">✉️</span>未読メッセージ</h2>' . $msgs
        . '<a class="gw-more" href="' . kv_h(kvgw_url('message')) . '">メッセージを開く</a></section>'
@@ -263,6 +302,10 @@ function kvgw_home($user) {
        . '<a class="gw-more" href="' . kv_h(kvgw_url('facility')) . '">施設の空きを見る</a></section>'
        . '<section class="kv-card"><h2><span class="kv-emoji">✅</span>ToDo</h2>' . $todos
        . '<a class="gw-more" href="' . kv_h(kvgw_url('todo')) . '">ToDoを開く</a></section>'
+       . '<section class="kv-card"><h2><span class="kv-emoji">📌</span>掲示板</h2>' . $bbs
+       . '<a class="gw-more" href="' . kv_h(kvgw_url('bulletin')) . '">掲示板を開く</a></section>'
+       . '<section class="kv-card"><h2><span class="kv-emoji">📝</span>ワークフロー</h2>' . $wfs
+       . '<a class="gw-more" href="' . kv_h(kvgw_url('workflow')) . '">ワークフローを開く</a></section>'
        . '</div>';
     echo '<p class="kv-eyebrow" style="margin-top:8px">業務アプリ</p>';
 }
@@ -273,7 +316,7 @@ function kvgw_home($user) {
 
 function kvgw_foot() {
     echo '<footer class="kv-foot"><b>' . kv_h(KVGWC_PRODUCT) . '</b> ' . kv_h(KVGWC_VERSION)
-       . '　—　メッセージ・施設予約・ToDo・共有スケジュールと、足していける業務アプリ';
+       . '　—　メッセージ・掲示板・施設予約・ToDo・ワークフロー・共有スケジュールと、足していける業務アプリ';
     if (function_exists('kvgw_demo_foot')) { echo kvgw_demo_foot(); }   // デモの案内は設定ファイル側に置く
     echo '</footer></body></html>';
 }
@@ -286,6 +329,25 @@ function kvgw_css() {
     return ''
     /* スマホではタブを折り返す(横に流すと、後ろのタブに気づけない) */
     . '@media(max-width:640px){.kv-navinner{flex-wrap:wrap;overflow-x:visible}.kv-navinner a{flex:1 1 calc(50% - 8px);justify-content:center}}'
+    /* ワークフロー */
+    . '.kv-tag.gw-tagback{background:#fdecea;color:#b3261e}'
+    . '.gw-dl{display:grid;grid-template-columns:minmax(90px,max-content) 1fr;gap:0;margin:16px 0 4px;border-top:1px solid #eef2f7}'
+    . '.gw-dl dt,.gw-dl dd{margin:0;padding:10px 0;border-bottom:1px solid #eef2f7;font-size:14.5px;min-width:0}'
+    . '.gw-dl dt{color:var(--muted);font-weight:800;font-size:12.5px;padding-right:18px}'
+    . '.gw-dl dd{white-space:pre-wrap;overflow-wrap:anywhere}'
+    . '@media(max-width:520px){.gw-dl{grid-template-columns:1fr}.gw-dl dt{border-bottom:0;padding-bottom:0}.gw-dl dd{padding-top:3px}}'
+    . '.gw-route{list-style:none;margin:0;padding:0;counter-reset:gwr}'
+    . '.gw-route li{counter-increment:gwr;position:relative;padding:10px 0 10px 40px;border-bottom:1px solid #eef2f7;min-width:0}'
+    . '.gw-route li:before{content:counter(gwr);position:absolute;left:0;top:10px;width:26px;height:26px;border-radius:50%;background:#eef2f7;color:#54637a;font-weight:800;font-size:12.5px;display:flex;align-items:center;justify-content:center}'
+    . '.gw-route li.ok:before{background:#e6f8ec;color:#1d6b3c}.gw-route li.ng:before{background:#fdecea;color:#b3261e}.gw-route li.now:before{background:#fff3df;color:#96590a}'
+    . '.gw-route li b{display:block;font-size:14px}.gw-route li>span{font-size:13px;color:var(--muted)}'
+    . '.gw-route li p{margin:5px 0 0;font-size:13.5px;white-space:pre-wrap;overflow-wrap:anywhere}'
+    . '.gw-route li select{width:100%;max-width:340px;margin-top:5px}'
+    . '.gw-wfitem{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,.8fr) auto minmax(0,1.3fr);gap:8px;align-items:center;margin-bottom:8px}'
+    . '.gw-wfstep{display:grid;grid-template-columns:26px minmax(0,1fr) minmax(0,1.3fr);gap:8px;align-items:center;margin-bottom:8px}'
+    . '.gw-wfstep>span{width:26px;height:26px;border-radius:50%;background:#eef2f7;color:#54637a;font-weight:800;font-size:12.5px;display:flex;align-items:center;justify-content:center}'
+    . '.gw-wfitem input[type=text],.gw-wfitem select,.gw-wfstep input,.gw-wfstep select{width:100%;min-width:0}'
+    . '@media(max-width:640px){.gw-wfitem{grid-template-columns:minmax(0,1fr) auto;padding-bottom:8px;border-bottom:1px solid #eef2f7}.gw-wfitem input[type=text]{grid-column:1/-1}.gw-wfstep{grid-template-columns:26px minmax(0,1fr)}.gw-wfstep select{grid-column:1/-1}}'
     /* ホーム */
     . '.gw-portal{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;margin-bottom:6px}'
     . '.gw-portal .kv-card{margin:0;padding:20px 20px 16px;display:flex;flex-direction:column;min-width:0}'

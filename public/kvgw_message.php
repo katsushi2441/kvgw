@@ -589,6 +589,24 @@ function kvgw_message_form($user, $id, $in, $error) {
 }
 
 /** 添付を渡す。読める人かどうかを確かめてから、必ず「保存するファイル」として送る。 */
+/** 添付を1つ渡す。$files は、権限を確かめた後の目録。呼ぶ前に必ず kvgw_*_can() を通すこと。 */
+function kvgw_file_send($files, $fid) {
+    $fid = preg_replace('/[^a-f0-9]/', '', (string)$fid);
+    foreach ($files as $f) {
+        if ($f['id'] !== $fid) { continue; }
+        $path = kvgw_file_path($fid);
+        if (!is_file($path)) { break; }
+        header('Content-Type: application/octet-stream');
+        header('X-Content-Type-Options: nosniff');
+        header('Content-Disposition: attachment; filename="file"; filename*=UTF-8\'\'' . rawurlencode($f['name']));
+        header('Content-Length: ' . filesize($path));
+        header('Cache-Control: private, no-store');
+        readfile($path);
+        return;
+    }
+    kv_fail(404, 'ファイルが見つかりません。');
+}
+
 function kvgw_message_file($user, $id) {
     $m = kvgw_msg_find($id);
     if (!kvgw_msg_can($user, $m, 'read')) { kv_fail(404, 'ファイルが見つからないか、受け取る権限がありません。'); }
